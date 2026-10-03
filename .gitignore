@@ -1,0 +1,26 @@
+# Build outputs
+build/
+cmake-build-*/
+out/
+
+# Qt Creator / IDE
+*.user
+*.user.*
+.vscode/
+.idea/
+
+# Runtime data
+runtime/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+# Personal course reports
+docs/*实习报告*.docx

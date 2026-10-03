@@ -4,6 +4,8 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QUuid>
+#include <QDir>
+#include <QFileInfo>
 
 DatabaseManager& DatabaseManager::instance()
 {
@@ -17,9 +19,22 @@ bool DatabaseManager::open(const QString& dbPath)
         return true;
     }
 
-    m_connectionName = QStringLiteral("minimine_") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), m_connectionName);
+    const QFileInfo dbFileInfo(dbPath);
+    const QString dbDir = dbFileInfo.absolutePath();
+
+    if (!QDir().mkpath(dbDir)) {
+        m_lastError = QStringLiteral("无法创建数据库目录：%1").arg(dbDir);
+        return false;
+    }
+
+    m_connectionName = QStringLiteral("minimine_")
+        + QUuid::createUuid().toString(QUuid::WithoutBraces);
+
+    QSqlDatabase db =
+        QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), m_connectionName);
+
     db.setDatabaseName(dbPath);
+
 
     if (!db.open()) {
         m_lastError = db.lastError().text();
@@ -32,6 +47,99 @@ bool DatabaseManager::open(const QString& dbPath)
     pragma.exec(QStringLiteral("PRAGMA journal_mode=WAL"));
     pragma.exec(QStringLiteral("PRAGMA busy_timeout=30000"));
     pragma.exec(QStringLiteral("PRAGMA synchronous=NORMAL"));
+
+    const QStringList schemaStatements = {
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS DrillHoleInfo ("
+            "borehole_id TEXT PRIMARY KEY,"
+            "area_id TEXT,"
+            "x_coord REAL,"
+            "y_coord REAL,"
+            "z_coord REAL,"
+            "total_depth REAL,"
+            "azimuth REAL,"
+            "dip_angle REAL,"
+            "extra_data TEXT,"
+            "import_time TEXT"
+            ")"
+        ),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS InclineInfo ("
+            "borehole_id TEXT,"
+            "point_id INTEGER,"
+            "area_id TEXT,"
+            "point_depth REAL,"
+            "deviation_angle REAL,"
+            "azimuth REAL,"
+            "extra_data TEXT,"
+            "PRIMARY KEY (borehole_id, point_id)"
+            ")"
+        ),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS StrataInfo ("
+            "borehole_id TEXT,"
+            "layer_order INTEGER,"
+            "area_id TEXT,"
+            "layer_no TEXT,"
+            "bottom_depth REAL,"
+            "rock_name TEXT,"
+            "dip_angle REAL,"
+            "extra_data TEXT,"
+            "PRIMARY KEY (borehole_id, layer_order)"
+            ")"
+        ),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS SampleRecord ("
+            "sample_id TEXT PRIMARY KEY,"
+            "borehole_id TEXT,"
+            "area_id TEXT,"
+            "start_depth REAL,"
+            "end_depth REAL,"
+            "sample_length REAL,"
+            "core_length REAL,"
+            "sample_type INTEGER,"
+            "extra_data TEXT"
+            ")"
+        ),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS GradeInfo ("
+            "sample_id TEXT,"
+            "element_name TEXT,"
+            "grade_value REAL,"
+            "extra_data TEXT,"
+            "PRIMARY KEY (sample_id, element_name)"
+            ")"
+        ),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS DataSourceInfo ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "source_file TEXT,"
+            "target_table TEXT,"
+            "import_time TEXT,"
+            "row_count INTEGER"
+            ")"
+        )
+    };
+
+    for (const QString& statement : schemaStatements) {
+        QSqlQuery schemaQuery(db);
+
+        if (!schemaQuery.exec(statement)) {
+            m_lastError = QStringLiteral("数据库表结构初始化失败：%1")
+                            .arg(schemaQuery.lastError().text());
+
+            db.close();
+            db = QSqlDatabase();
+            QSqlDatabase::removeDatabase(m_connectionName);
+            m_connectionName.clear();
+            return false;
+        }
+    }
 
     QSqlQuery columnCheck(db);
     if (columnCheck.exec(QStringLiteral("PRAGMA table_info(DrillHoleInfo)"))) {

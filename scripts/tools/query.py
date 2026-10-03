@@ -1,6 +1,16 @@
+import os
 import sqlite3
+import sys
 
-conn = sqlite3.connect('minimine.db')
+COMMON_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "common")
+)
+if COMMON_DIR not in sys.path:
+    sys.path.insert(0, COMMON_DIR)
+
+from db_common import DB_PATH
+
+conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
 # 查询所有表记录数

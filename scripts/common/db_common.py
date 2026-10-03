@@ -31,7 +31,87 @@ CORE_TABLES = [
     "SampleRecord",
     "GradeInfo",
 ]
+def create_core_tables(conn):
+    """Create the MiniMine database schema when it does not exist."""
+    cursor = conn.cursor()
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS DrillHoleInfo (
+            borehole_id TEXT PRIMARY KEY,
+            area_id TEXT,
+            x_coord REAL,
+            y_coord REAL,
+            z_coord REAL,
+            total_depth REAL,
+            azimuth REAL,
+            dip_angle REAL,
+            extra_data TEXT,
+            import_time TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS InclineInfo (
+            borehole_id TEXT,
+            point_id INTEGER,
+            area_id TEXT,
+            point_depth REAL,
+            deviation_angle REAL,
+            azimuth REAL,
+            extra_data TEXT,
+            PRIMARY KEY (borehole_id, point_id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS StrataInfo (
+            borehole_id TEXT,
+            layer_order INTEGER,
+            area_id TEXT,
+            layer_no TEXT,
+            bottom_depth REAL,
+            rock_name TEXT,
+            dip_angle REAL,
+            extra_data TEXT,
+            PRIMARY KEY (borehole_id, layer_order)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS SampleRecord (
+            sample_id TEXT PRIMARY KEY,
+            borehole_id TEXT,
+            area_id TEXT,
+            start_depth REAL,
+            end_depth REAL,
+            sample_length REAL,
+            core_length REAL,
+            sample_type INTEGER,
+            extra_data TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS GradeInfo (
+            sample_id TEXT,
+            element_name TEXT,
+            grade_value REAL,
+            extra_data TEXT,
+            PRIMARY KEY (sample_id, element_name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS DataSourceInfo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file TEXT,
+            target_table TEXT,
+            import_time TEXT,
+            row_count INTEGER
+        )
+    """)
+
+    conn.commit()
 
 def ensure_logs_dir():
     os.makedirs(LOGS_DIR, exist_ok=True)
@@ -44,10 +124,13 @@ def configure_connection(conn):
 
 
 def get_connection():
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
     conn = sqlite3.connect(DB_PATH, timeout=30)
     configure_connection(conn)
     return conn
-
 
 def table_has_column(cursor, table_name, column_name):
     cursor.execute(f"PRAGMA table_info({table_name})")
@@ -81,11 +164,13 @@ def stamp_drill_hole_import_time(record):
 
 
 def ensure_schema(conn=None):
-    """Ensure all core tables contain the EXTRA_DATA column."""
+    """Ensure the MiniMine database schema exists and is up to date."""
     close_after = False
     if conn is None:
         conn = get_connection()
         close_after = True
+
+    create_core_tables(conn)
 
     for table_name in CORE_TABLES:
         ensure_extra_data_column(conn, table_name)
@@ -94,3 +179,4 @@ def ensure_schema(conn=None):
 
     if close_after:
         conn.close()
+

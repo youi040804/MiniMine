@@ -1451,9 +1451,8 @@ def generate_error_log_file(error_records, target_table):
 
     return log_path.replace("\\", "/")
 
-
 def backup_original_file(file_path):
-    """Copy imported source file to data/raw after successful DB commit."""
+    """Copy imported source file to runtime/raw after successful DB commit."""
     os.makedirs(RAW_DATA_DIR, exist_ok=True)
     dst = os.path.join(RAW_DATA_DIR, os.path.basename(file_path))
     shutil.copy2(file_path, dst)

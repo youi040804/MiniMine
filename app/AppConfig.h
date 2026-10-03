@@ -10,10 +10,6 @@ namespace AppConfig {
 
 inline QString projectRoot()
 {
-    QDir dir(QCoreApplication::applicationDirPath());
-
-    // 开发环境下，可执行文件通常位于构建目录中。
-    // 允许通过环境变量显式指定 MiniMine 项目根目录。
     const QString envRoot =
         QProcessEnvironment::systemEnvironment().value(
             QStringLiteral("MINIMINE_ROOT"));
@@ -22,6 +18,18 @@ inline QString projectRoot()
         return QDir::cleanPath(envRoot);
     }
 
+    QDir dir(QCoreApplication::applicationDirPath());
+
+    // 开发环境：从构建目录向上查找包含 scripts 的项目根目录。
+    QDir candidate = dir;
+    while (!candidate.isRoot()) {
+        if (candidate.exists(QStringLiteral("scripts"))) {
+            return QDir::cleanPath(candidate.absolutePath());
+        }
+        candidate.cdUp();
+    }
+
+    // 部署环境：允许 scripts 与可执行文件位于同一目录。
     return QDir::cleanPath(dir.absolutePath());
 }
 
