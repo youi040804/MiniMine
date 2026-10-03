@@ -10,10 +10,19 @@ from datetime import datetime
 
 import pandas as pd
 
-from db_common import DB_PATH, LOGS_DIR, EXTRA_DATA_COLUMN, IMPORT_TIME_COLUMN, ensure_logs_dir, ensure_schema, get_connection, stamp_drill_hole_import_time
+from db_common import (
+    PROJECT_ROOT,
+    DB_PATH,
+    LOGS_DIR,
+    EXTRA_DATA_COLUMN,
+    IMPORT_TIME_COLUMN,
+    ensure_logs_dir,
+    ensure_schema,
+    get_connection,
+    stamp_drill_hole_import_time,
+)
 from file_reader import read_dataframe, validate_file_path
-
-RAW_DATA_DIR = r"D:\Desktop\MiniMineUI\data\raw"
+RAW_DATA_DIR = os.path.join(PROJECT_ROOT, "runtime", "raw")
 
 TABLE_COLUMNS = {
     "DrillHoleInfo": [

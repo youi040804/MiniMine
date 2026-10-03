@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QFileInfo>
+#include <QProcessEnvironment>
 
 namespace {
 
@@ -55,26 +56,30 @@ bool PythonRunner::runScript(const QString& scriptFileName,
         return false;
     }
 
-    if (!QFileInfo::exists(AppConfig::pythonExe())) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("找不到 Python 解释器: %1").arg(AppConfig::pythonExe());
-        }
-        return false;
-    }
 
     ScopedDatabaseRelease releaseDbForPython;
 
     QProcess process;
     process.setWorkingDirectory(AppConfig::projectRoot());
 
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("MINIMINE_ROOT"), AppConfig::projectRoot());
+    env.insert(QStringLiteral("MINIMINE_DB_PATH"), AppConfig::dbPath());
+    env.insert(QStringLiteral("MINIMINE_LOG_DIR"), AppConfig::logsDir());
+    process.setProcessEnvironment(env);
+
     QStringList fullArgs;
     fullArgs << scriptPath;
     fullArgs << args;
 
-    process.start(AppConfig::pythonExe(), fullArgs);
+    const QString pythonExecutable = AppConfig::pythonExe();
+
+    process.start(pythonExecutable, fullArgs);
     if (!process.waitForStarted(10000)) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("无法启动 Python 进程");
+            *errorMessage =
+                QStringLiteral("无法启动 Python 解释器 \"%1\": %2")
+                    .arg(pythonExecutable, process.errorString());
         }
         return false;
     }

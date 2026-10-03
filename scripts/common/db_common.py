@@ -4,8 +4,23 @@ import os
 import sqlite3
 from datetime import datetime
 
-DB_PATH = r"D:\Desktop\MiniMineUI\minimine.db"
-LOGS_DIR = r"D:\Desktop\MiniMineUI\logs"
+
+PROJECT_ROOT = os.environ.get(
+    "MINIMINE_ROOT",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")),
+)
+
+DB_PATH = os.environ.get(
+    "MINIMINE_DB_PATH",
+    os.path.join(PROJECT_ROOT, "runtime", "minimine.db"),
+)
+
+LOGS_DIR = os.environ.get(
+    "MINIMINE_LOG_DIR",
+    os.path.join(PROJECT_ROOT, "runtime", "logs"),
+)
+
+
 EXTRA_DATA_COLUMN = "EXTRA_DATA"
 IMPORT_TIME_COLUMN = "import_time"
 
