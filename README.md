@@ -1,17 +1,13 @@
-# MiniMine 钻孔数据界面录入模块
+# MiniMine 钻孔数据录入与管理模块
 
-本仓库对应课程 **应用开发实习** 小组作业项目 **MiniMine 矿山数字系统** 中的 **钻孔数据界面录入** 功能。基于 **Qt Widgets（C++）桌面界面 + Python 数据处理 + SQLite 持久化**，实现单孔分步录入、多格式批量导入、冲突交互处理、字段映射配置复用，以及 CSV / Excel 导出。
+MiniMine 是应用开发实习小组项目中的数字矿山数据管理系统。本仓库为其中的 **钻孔数据录入与管理模块**，由本人负责开发，主要解决地质钻孔数据的单孔录入、批量导入、字段映射、数据校验、冲突处理与导出问题。
 
-录入结果写入 SQLite，可供系统中其他模块（如三维展示）读取使用。
+项目采用 **Qt Widgets（C++）+ Python + SQLite** 的混合架构：
 
----
-
-## 项目背景与分工
-
-| 项目 | MiniMine 矿山数字系统 |
-|------|----------------------|
-| 类型 | 应用开发实习课程 · 小组作业 |
-| 本模块职责 | 钻孔数据的界面录入与管理（单孔录入、批量导入、查看、导出） |
+- Qt/C++ 负责桌面端交互、表单录入、冲突决策和数据展示；
+- Python 负责 CSV / Excel 数据解析、字段映射、批量校验与导入；
+- SQLite 负责本地持久化；
+- C++ 通过 `QProcess` 调用 Python，双方通过 stdout JSON 协议交换执行结果。
 
 ---
 
@@ -19,12 +15,34 @@
 
 | 功能 | 说明 |
 |------|------|
-| **单孔录入** | 四步向导：钻孔概况 → 测斜 → 地层 → 样品/品位；支持扩展字段与冲突处理 |
-| **批量导入** | 支持 `.csv` / `.xlsx` / `.xls`；列名自动建议映射；字段匹配度校验；映射方案保存/加载 |
-| **冲突处理** | 主键冲突时逐条或批量选择：跳过 / 覆盖 / 合并 |
-| **详情查看** | 主表双击钻孔，分 Tab 查看概况、测斜、地层、样品与品位 |
-| **数据导出** | 按表导出为 CSV（UTF-8-BOM）或 Excel（xlsx） |
-| **与三维模块衔接** | 数据落库后可供下游三维模块读取（本模块不负责自动联动 QuantyView3D） |
+| 单孔录入 | 按钻孔概况 → 测斜 → 地层 → 样品 / 品位分步录入 |
+| 批量导入 | 支持 `.csv` / `.xlsx` / `.xls` 数据文件 |
+| 字段映射 | 根据源表列名建议字段映射，并支持映射方案保存 / 加载 |
+| 数据校验 | 校验必填字段、数值范围以及钻孔 / 样品等业务关联关系 |
+| 冲突处理 | 主键冲突支持跳过、覆盖、合并三种策略 |
+| 扩展字段 | 未映射的非标准字段可保存至 `EXTRA_DATA` JSON |
+| 数据查看 | 按钻孔查看概况、测斜、地层、样品和品位数据 |
+| 数据导出 | 支持 CSV（UTF-8 BOM）和 XLSX 导出 |
+| 错误记录 | 批量导入失败记录可生成错误日志 |
+
+---
+
+## 实际数据验证
+
+使用甲方的钻孔数据文件进行批量导入验证，共处理 **13,663 条记录**：
+
+| 数据集 | 原始记录 | 成功入库 | 校验拦截 |
+|--------|---------:|---------:|---------:|
+| 钻孔概况 | 60 | 60 | 0 |
+| 数据集 A | 825 | 772 | 53 |
+| 数据集 B | 283 | 246 | 37 |
+| 数据集 C | 4,091 | 4,091 | 0 |
+| 数据集 D | 8,404 | 8,404 | 0 |
+| **合计** | **13,663** | **13,573** | **90** |
+
+其中 90 条异常记录由业务校验逻辑拦截，主要用于验证批量导入过程中的异常数据识别与错误记录能力。
+
+> 仓库不包含上述原始数据文件及运行时数据库。
 
 ---
 
@@ -32,163 +50,320 @@
 
 | 层级 | 技术 |
 |------|------|
-| 界面 | Qt Widgets（C++），`QMainWindow` / `QDialog` / `QTableWidget` |
-| 桥接 | `QProcess` 调用 Python，stdout 约定返回 JSON |
-| 数据访问（C++） | Qt SQL + SQLite（`DatabaseManager` 单例） |
-| 数据处理（Python） | pandas、openpyxl；多编码 CSV 读取 |
-| 存储 | SQLite（WAL 模式、`busy_timeout`） |
+| GUI | C++ / Qt Widgets |
+| C++ 数据访问 | Qt SQL / SQLite |
+| 进程桥接 | `QProcess` |
+| 数据处理 | Python / pandas |
+| Excel 处理 | openpyxl / xlrd |
+| 数据存储 | SQLite |
+| 构建 | CMake |
 
 ---
 
-## 架构设计
+## 架构
 
-![Minimine钻孔数据界面录入功能架构图](images/Minimine钻孔数据界面录入功能架构图.png)
+![MiniMine 钻孔数据录入模块架构](images/Minimine钻孔数据界面录入功能架构图.png)
 
-**分工原则**
+```text
+┌──────────────────────────────┐
+│        Qt Widgets UI         │
+│ 单孔录入 / 批量导入 / 查看 / 导出 │
+└──────────────┬───────────────┘
+               │
+          QProcess + JSON
+               │
+┌──────────────▼───────────────┐
+│        Python Scripts        │
+│ 解析 / 映射 / 校验 / 冲突处理 / 导出 │
+└──────────────┬───────────────┘
+               │
+             SQLite
+               │
+┌──────────────▼───────────────┐
+│        MiniMine Database     │
+│ 钻孔 / 测斜 / 地层 / 样品 / 品位 │
+└──────────────────────────────┘
+```
 
-- **C++ UI**：交互、表单校验提示、映射配置管理、冲突对话框
-- **Python**：批量解析、字段映射落库、冲突分析与合并策略、导出
-- **桥接约定**：脚本向 stdout 打印 JSON（`status` / `message` / 业务字段）；失败时带错误信息
-
-**并发注意**：执行 Python 前，`PythonRunner` 会临时关闭 C++ 侧数据库连接，避免 SQLite 写锁冲突，结束后再重新打开。
+执行 Python 写库操作前，`PythonRunner` 会暂时释放 C++ 侧 SQLite 连接；脚本结束后重新打开数据库连接，降低跨进程同时访问 SQLite 时的锁冲突风险。
 
 ---
 
-## 目录结构
+## 核心设计
 
+### 1. C++ / Python 进程桥
+
+Qt 通过 `QProcess` 调用 Python 脚本：
+
+```text
+Qt
+ │
+ ├── script path
+ ├── command arguments
+ └── environment
+        │
+        ▼
+     Python
+        │
+        ▼
+ stdout JSON
+        │
+        ▼
+       Qt
 ```
-├── app/                      # 程序入口与主窗口
-│   ├── main.cpp
-│   ├── MiniMineUI.{h,cpp,ui,qrc}
-│   └── AppConfig.h           # 路径配置（项目根、DB、Python、scripts）
-├── ui/
-│   ├── dialogs/
-│   │   ├── entry/            # 单孔录入
-│   │   ├── import/           # 批量导入、字段映射、冲突对话框
-│   │   └── view/             # 钻孔详情、导出
-│   └── widgets/              # 通用控件（如数值输入 NumericInputField）
-├── bridge/                   # C++ ↔ Python 进程桥
-│   └── PythonRunner.{h,cpp}
-├── data/sqlite/              # C++ 数据库访问层
-│   └── DatabaseManager.{h,cpp}
-├── scripts/
-│   ├── common/               # DB 工具、文件读取、单孔公共逻辑
-│   ├── entry/                # 单孔保存（概况/测斜/地层/样品）
-│   ├── import/               # 批量导入、读列名
-│   ├── export/               # 表导出
-│   ├── schema/               # 建表与结构迁移
-│   └── tools/                # 调试查询脚本
-├── runtime/                  # 运行时产物（库文件、日志、映射配置等）
-├── docs/                     # 文档 / 实习材料
-└── README.md
+
+Python 脚本通过 stdout 返回 JSON，统一表达执行状态、错误信息和业务结果。
+
+项目路径、数据库路径和日志路径通过 `AppConfig` 与环境变量传递，避免依赖开发机器上的绝对路径。
+
+### 2. 批量导入与字段映射
+
+批量导入流程：
+
+```text
+选择 CSV / Excel
+        ↓
+读取源文件列
+        ↓
+字段映射建议
+        ↓
+用户确认映射
+        ↓
+业务数据校验
+        ↓
+冲突分析
+        ↓
+跳过 / 覆盖 / 合并
+        ↓
+事务写入 SQLite
+        ↓
+导入统计 / 错误日志
 ```
+
+对于不同来源文件中无法直接映射到标准数据库字段的附加列，统一保存到 `EXTRA_DATA` JSON 中，以适配非标准表头。
+
+### 3. 冲突处理
+
+数据库主键已存在时支持三种处理策略：
+
+| 策略 | 行为 |
+|------|------|
+| 跳过 | 保留数据库已有记录 |
+| 覆盖 | 使用新记录更新已有数据 |
+| 合并 | 非空新值覆盖旧值，空值保留旧值，扩展字段进行 JSON 合并 |
+
+批量导入采用“先分析冲突 → 用户选择策略 → 再执行写入”的两阶段流程，避免直接覆盖已有数据。
+
+### 4. 数据一致性校验
+
+业务层维护钻孔数据之间的关联关系：
+
+```text
+DrillHoleInfo
+ ├── InclineInfo
+ ├── StrataInfo
+ └── SampleRecord
+          │
+          └── GradeInfo
+```
+
+测斜、地层和样品记录要求对应钻孔已经存在；品位记录要求对应样品已经存在。
+
+同时对深度、长度等数值字段执行合法性检查，异常记录不会直接写入数据库。
+
+### 5. SQLite 访问
+
+SQLite 配置包括：
+
+```text
+journal_mode = WAL
+busy_timeout = 30000 ms
+synchronous = NORMAL
+```
+
+C++ 与 Python 两侧均支持在数据库不存在时创建基础 Schema。
+
+`runtime/` 目录用于存放数据库、日志、映射配置和导入文件备份，并通过 `.gitignore` 排除，不将运行时数据提交到仓库。
 
 ---
 
 ## 数据模型
 
-核心五表 + 导入溯源表：
+核心五张业务表及一张导入来源记录表：
 
-| 表名 | 含义 | 主键 |
-|------|------|------|
+| 表 | 含义 | 主键 |
+|----|------|------|
 | `DrillHoleInfo` | 钻孔概况 | `borehole_id` |
-| `InclineInfo` | 测斜点 | `(borehole_id, point_id)` |
-| `StrataInfo` | 地层分层 | `(borehole_id, layer_order)` |
-| `SampleRecord` | 样品 | `sample_id` |
-| `GradeInfo` | 品位 | `(sample_id, element_name)` |
-| `DataSourceInfo` | 导入来源记录 | 自增 id |
+| `InclineInfo` | 测斜记录 | `(borehole_id, point_id)` |
+| `StrataInfo` | 地层记录 | `(borehole_id, layer_order)` |
+| `SampleRecord` | 样品记录 | `sample_id` |
+| `GradeInfo` | 品位记录 | `(sample_id, element_name)` |
+| `DataSourceInfo` | 导入来源记录 | 自增 ID |
 
-**扩展字段**：各核心表含 `EXTRA_DATA`（JSON 文本），用于保存源文件中未映射到标准列的附加列，兼顾标准模型与现场表格差异。
-
-**外键语义**（业务层校验）：测斜 / 地层 / 样品依赖已存在的钻孔；品位依赖已存在的样品。
+核心业务表包含 `EXTRA_DATA` 字段，用 JSON 文本保存源文件中的扩展列。
 
 ---
 
-## 核心模块说明
-
-### 1. 单孔录入（`SingleEntryDialog` + `scripts/entry/`）
-
-- 分步录入，可按 Tab 跳转；先保存概况，再写入关联子表
-- 数值控件带范围校验与清空按钮（`NumericInputField`）
-- 支持自定义扩展字段
-- 保存流程：`analyze` 分析冲突 → UI 选择策略 → `save` 落库
-
-### 2. 批量导入（`BatchImportDialog` + `scripts/import/batch_import.py`）
-
-- 统一文件读取（编码自动尝试：utf-8-sig / utf-8 / gbk 等）
-- **字段映射**：中英别名打分建议；核心字段匹配度门槛（过低拦截、偏低警告）
-- **映射配置**：按目标表保存 / 加载 JSON 方案，可按列结构自动匹配历史配置
-- **品位表**：支持多列元素 → 元素名映射（Cu、Zn、Au 等）
-- 导入结果统计：新增 / 覆盖 / 合并 / 跳过 / 失败；可下载日志
-
-### 3. 冲突策略（`ImportConflictDialog`）
-
-| 策略 | 行为 |
-|------|------|
-| **跳过** | 保留库中记录 |
-| **覆盖** | 以新数据为主写入 |
-| **合并** | 非空新值覆盖旧值；空值保留旧值；`EXTRA_DATA` 做 JSON 合并 |
-
-支持「应用到全部冲突」。
-
-### 4. 详情与导出
-
-- `DrillDetailDialog`：只读多 Tab 详情（样品联动品位与扩展字段展示）
-- `ExportDataDialog` + `scripts/export/export_data.py`：按表导出 CSV / XLSX
-
----
-
-## 设计要点
-
-1. **混合架构**：UI 与重数据处理解耦；Python 脚本可独立调试，C++ 只关心 JSON 契约。
-2. **进程桥与资源释放**：`ScopedDatabaseRelease` 保证 Python 写库时 C++ 不占连接。
-3. **冲突两阶段提交**：先 analyze 再按用户决议 import，避免盲目覆盖。
-4. **字段映射与匹配度**：别名归一化 + 打分建议；核心字段完备性作为导入门禁。
-5. **模式弹性**：标准列 + `EXTRA_DATA`，适配现场非标表头。
-6. **SQLite 工程实践**：WAL、`busy_timeout`、导入时间戳、结构迁移脚本。
-
----
-
-## 主流程（简述）
-
-**单孔录入**
-
-```
-打开向导 → 填概况并保存 →（可选）测斜 / 地层 / 样品
-         → 若主键已存在则弹冲突框 → Python 落库 → 主表刷新
-```
-
-**批量导入**
-
-```
-选文件 → 选目标表 → 自动建议映射 / 调映射 → 校验匹配度
-       → analyze 冲突 → 用户决议 → import → 结果统计与日志
-```
-
----
-
-## 配置说明
-
-本地路径集中在：
-
-- C++：`app/AppConfig.h`（`projectRoot` / `dbPath` / `pythonExe` / `scriptsDir` 等）
-- Python：`scripts/common/db_common.py`（`DB_PATH` / `LOGS_DIR`）
-
-换机运行时需对齐上述路径，并保证 Python 环境已安装 `pandas`、`openpyxl`。
-
----
-
-## 依赖（Python）
+## 目录结构
 
 ```text
-pandas
-openpyxl
+MiniMine/
+├── app/                 # 程序入口、主窗口、路径配置
+├── bridge/              # C++ ↔ Python 进程桥
+├── data/
+│   └── sqlite/          # C++ SQLite 数据访问
+├── ui/
+│   ├── dialogs/
+│   │   ├── entry/       # 单孔录入
+│   │   ├── import/      # 批量导入 / 字段映射 / 冲突处理
+│   │   └── view/        # 数据查看 / 导出
+│   └── widgets/
+├── scripts/
+│   ├── common/          # Python 公共数据库 / 文件工具
+│   ├── entry/           # 单孔保存脚本
+│   ├── import/          # 批量导入
+│   ├── export/          # 数据导出
+│   ├── schema/          # Schema 初始化 / 迁移
+│   └── tools/           # 调试工具
+├── images/              # README 图片
+└── README.md
 ```
 
-（读取旧版 `.xls` 时可能还需额外引擎，视环境而定。）
+`runtime/` 在程序运行过程中按需创建，不属于源码仓库。
 
 ---
 
-## 说明
+## 环境依赖
 
-本模块为 MiniMine 矿山数字系统课程实习小组作业中的钻孔数据界面录入部分，业务表结构面向地质钻孔数据录入场景设计。
+### C++
+
+需要支持 Qt Widgets 与 Qt SQL 的 Qt 开发环境，以及 CMake / C++ 编译器。
+
+项目使用的 Qt 模块主要包括：
+
+```text
+Qt Widgets
+Qt SQL
+```
+
+SQLite 通过 Qt SQL 的 QSQLITE 驱动访问。
+
+### Python
+
+建议使用 Python 3，并安装：
+
+```bash
+pip install pandas openpyxl xlrd
+```
+
+其中：
+
+- `pandas`：批量数据处理；
+- `openpyxl`：读取 / 写入 `.xlsx`；
+- `xlrd`：读取旧版 `.xls`。
+
+---
+
+## 路径配置
+
+项目不依赖固定的本机绝对路径。
+
+默认情况下，程序会从可执行文件位置向上查找包含 `scripts/` 的项目根目录。
+
+也可以通过环境变量显式指定：
+
+```text
+MINIMINE_ROOT
+MINIMINE_PYTHON
+MINIMINE_DB_PATH
+MINIMINE_LOG_DIR
+```
+
+例如：
+
+```bash
+export MINIMINE_PYTHON=/usr/bin/python3
+```
+
+Windows PowerShell：
+
+```powershell
+$env:MINIMINE_PYTHON = "C:\Path\To\python.exe"
+```
+
+---
+
+## Quick Start
+
+### 1. 获取源码
+
+```bash
+git clone <repository-url>
+cd MiniMine
+```
+
+### 2. 安装 Python 依赖
+
+```bash
+pip install pandas openpyxl xlrd
+```
+
+### 3. 可选：验证数据库初始化
+
+无需启动 GUI，也可以通过 Python 脚本初始化并检查数据库：
+
+```bash
+python scripts/schema/import_data.py
+python scripts/tools/query.py
+```
+
+首次运行时会在：
+
+```text
+runtime/minimine.db
+```
+
+创建 SQLite 数据库及基础表结构。
+
+### 4. 构建 Qt 程序
+
+使用本机 Qt + CMake 环境配置并构建项目，然后启动生成的 MiniMine 可执行程序。
+
+程序启动后会使用 `runtime/minimine.db`；如果数据库不存在，数据库访问层会创建基础表结构。
+
+> 当前仓库的 Python 数据库初始化链路已进行 fresh-database smoke test；Qt GUI 需要在具备 Qt 开发环境的机器上构建运行。
+
+---
+
+## Python 数据库 Smoke Test
+
+数据库初始化逻辑可以脱离 GUI 验证。
+
+例如在 Linux / WSL 中：
+
+```bash
+rm -rf /tmp/minimine-smoke
+
+MINIMINE_DB_PATH=/tmp/minimine-smoke/minimine.db \
+python3 scripts/tools/query.py
+```
+
+在数据库文件和父目录均不存在的情况下，脚本会创建数据库 Schema，并输出各核心表当前记录数。
+
+空库预期结果：
+
+```text
+DrillHoleInfo: 0 条
+InclineInfo: 0 条
+StrataInfo: 0 条
+SampleRecord: 0 条
+GradeInfo: 0 条
+```
+
+---
+
+## 项目说明
+
+本仓库对应 MiniMine 数字矿山系统中的钻孔数据录入与管理模块。
+
+项目重点在于桌面端数据录入、非标准表格批量导入、字段映射、业务数据校验以及 C++ / Python / SQLite 之间的工程协作，不包含完整数字矿山系统中的三维建模等其他模块。
