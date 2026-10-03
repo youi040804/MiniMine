@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import sys
 
 COMMON_DIR = os.path.abspath(
@@ -8,9 +7,10 @@ COMMON_DIR = os.path.abspath(
 if COMMON_DIR not in sys.path:
     sys.path.insert(0, COMMON_DIR)
 
-from db_common import DB_PATH
+from db_common import ensure_schema, get_connection
 
-conn = sqlite3.connect(DB_PATH)
+conn = get_connection()
+ensure_schema(conn)
 cursor = conn.cursor()
 
 # 查询所有表记录数
