@@ -56,7 +56,6 @@ MiniMine 是应用开发实习小组项目中的数字矿山数据管理系统�
 | 数据处理 | Python / pandas |
 | Excel 处理 | openpyxl / xlrd |
 | 数据存储 | SQLite |
-| 构建 | CMake |
 
 ---
 
