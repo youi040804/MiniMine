@@ -236,7 +236,7 @@ MiniMine/
 
 ### C++
 
-需要支持 Qt Widgets 与 Qt SQL 的 Qt 开发环境，以及 CMake / C++ 编译器。
+需要支持 Qt Widgets 与 Qt SQL 的 Qt 开发环境，以及 C++ 编译器。
 
 项目使用的 Qt 模块主要包括：
 
@@ -297,7 +297,7 @@ $env:MINIMINE_PYTHON = "C:\Path\To\python.exe"
 ### 1. 获取源码
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/youi040804/MiniMine.git
 cd MiniMine
 ```
 
@@ -324,13 +324,11 @@ runtime/minimine.db
 
 创建 SQLite 数据库及基础表结构。
 
-### 4. 构建 Qt 程序
+### 4. 运行 Qt 程序
 
-使用本机 Qt + CMake 环境配置并构建项目，然后启动生成的 MiniMine 可执行程序。
+Qt GUI 需要在具备 Qt Widgets、Qt SQL 和 QSQLITE 驱动的 Qt 开发环境中构建运行。
 
 程序启动后会使用 `runtime/minimine.db`；如果数据库不存在，数据库访问层会创建基础表结构。
-
-> 当前仓库的 Python 数据库初始化链路已进行 fresh-database smoke test；Qt GUI 需要在具备 Qt 开发环境的机器上构建运行。
 
 ---
 
